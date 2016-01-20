@@ -1,0 +1,137 @@
+var net = require('net');
+var chatServer = net.createServer();
+var userList = [];
+var clientList=[];
+
+chatServer.on('connection', function(client) {
+  // JS 可以为对象自由添加属性。这里我们添加一个 name 的自定义属性，用于表示哪个客户端（客户端的地址+端口为依据）  
+  client.name = client.remoteAddress + ':' + client.remotePort;
+  client.on('data', function(data) {
+    var s= data.toString("UTF-8",0,data.length);
+    var json = JSON.parse(s);
+    var list = client.remoteAddress.split("ffff:");
+    var ip = list[1].split(":")[0];
+    json.ip=ip;
+
+
+
+  parse(json,client);
+  });
+
+});
+
+function parse(json,client){
+  var action = json.action;
+  switch (action){
+    case 0:
+
+      login(json,client);
+      break;
+    case 1:
+      chat(json,client);
+      break;
+    case 2:
+      logout(client);
+      break;
+  }
+}
+
+function login(json,client){
+  var has=false;
+  for(i=0;i<clientList.length;i++){
+    if(userList[i].ip==json.ip){
+      console.log(json.ip)
+      has=true;
+    }
+  }
+  if(has){
+    client.write("already login");
+    client.end();
+  }else{
+    json.loginport=json.loginport;
+    userList[userList.length] = json;
+    clientList[clientList.length] = client;
+    console.log(json)
+    client.write("login");
+  }
+
+
+}
+
+function chat(json,client){
+  var ip=json.ip;
+  for(i=0;i<userList.length;i++){
+if(userList[i].ip!=ip){
+  send(i,json);
+}
+  }
+  client.write("ok");
+  client.end();
+}
+
+function logout(client){
+  var already = false;
+  var postion=-1;
+  for(i=0;i<clientList.length;i++){
+    if(clientList[i].ip==client.ip){
+      postion=i;
+      already = true;
+    }
+  }
+  if(already){
+    clientList[postion].write("logout");
+    clientList[postion].end()
+    clientList.splice(postion,1);
+    client.write("logout");
+    client.end();
+  }else{
+    client.write("not yet login");
+    client.end();
+  }
+
+}
+
+function broadcast(message, client) {
+  for(var i=0;i<clientList.length;i+=1) {
+    if(client !== clientList[i]) {
+      clientList[i].write(client.name + " says " + message);
+      console.log(message)
+    }
+  }
+}
+chatServer.listen(9000);
+
+
+
+
+function send(i,json){
+  var send = require('net');
+  var client = new send.Socket();
+  console.log('send:'+userList[i].ip+":"+userList[i].loginport+":"+json.content);
+  client.connect( userList[i].loginport,userList[i].ip, function() {
+
+    // 建立连接后立即向服务器发送数据，服务器将收到这些数据
+    client.write(json.content);
+
+  });
+  // 为客户端添加“data”事件处理函数
+// data是服务器发回的数据
+  client.on('data', function(data) {
+
+    console.log('reslut: ' + data);
+    // 完全关闭连接
+    client.destroy();
+
+  });
+
+  client.on("error",function(data){
+    console.log('error: ' + data);
+  })
+
+// 为客户端添加“close”事件处理函数
+  client.on('close', function() {
+    console.log('Connection closed');
+  });
+}
+
+
